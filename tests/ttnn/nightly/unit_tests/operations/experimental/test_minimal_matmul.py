@@ -443,6 +443,47 @@ def test_linear_dtype_compute_config(
     assert check_result["relative_rmse"] < RMSE_THRESHOLD
 
 
+@pytest.mark.parametrize("K_block_size", [8, 2], ids=["8_K_blocks", "32_K_blocks"])
+def test_linear_fp32_output_not_rounded_to_tf32(device, K_block_size):
+    """A Float32 output must keep the full fp32 sum, not a TF32-rounded copy of it.
+
+    With fp32_dest_acc_en=True the K partials are packer-L1-accumulated into a Float32
+    intermediate and copied to DEST with copy_tile before packing. Integer operands with
+    |x| <= 8 and K = 2048 keep every partial sum below 2**24, so the product is exact in
+    fp32 whatever the summation order: the output has to match torch bit for bit.
+    """
+    M, K, N = 64, 2048, 128
+    torch.manual_seed(3)
+    a = torch.randint(-8, 9, (M, K)).float()
+    b = torch.randint(-8, 9, (K, N)).float()
+    golden = a @ b
+
+    compute_config = ttnn.init_device_compute_kernel_config(
+        device.arch(),
+        math_fidelity=ttnn.MathFidelity.HiFi4,
+        math_approx_mode=False,
+        fp32_dest_acc_en=True,
+        packer_l1_acc=True,
+    )
+    matmul_config = ttnn.MinimalMatmulConfig(
+        M_block_size=2,
+        K_block_size=K_block_size,
+        N_block_size=2,
+        subblock_h=1,
+        subblock_w=1,
+        compute_with_storage_grid_size=ttnn.CoreCoord(2, 2),
+    )
+    tt_a = ttnn.from_torch(a, dtype=ttnn.float32, device=device, layout=ttnn.TILE_LAYOUT)
+    tt_b = ttnn.from_torch(b, dtype=ttnn.float32, device=device, layout=ttnn.TILE_LAYOUT)
+    tt_output = ttnn.experimental.minimal_matmul(
+        tt_a, tt_b, compute_kernel_config=compute_config, config=matmul_config, dtype=ttnn.float32
+    )
+    output = ttnn.to_torch(tt_output).reshape(M, N)
+
+    mismatches = int((output != golden).sum())
+    assert mismatches == 0, f"{mismatches}/{output.numel()} outputs differ from the exact fp32 product"
+
+
 @pytest.mark.parametrize("M", [32, 96, 320, 4096])
 @pytest.mark.parametrize("K", [32, 96, 320, 4096])
 @pytest.mark.parametrize("N", [32, 96, 320, 4096])

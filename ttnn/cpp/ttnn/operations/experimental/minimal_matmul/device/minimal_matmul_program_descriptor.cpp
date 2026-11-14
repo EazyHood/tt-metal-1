@@ -871,6 +871,14 @@ ttnn::device_operation::ProgramArtifacts MinimalMatmulDeviceOperation::ProgramFa
             {DFB_TERNARY_A, ternary_a_data_format},
             {DFB_TERNARY_B, ternary_c_data_format},
         };
+        // The K partials are packer-L1-accumulated into the Float32 intermediate. Without a fused bias,
+        // ternary or SwiGLU epilogue, its only reader is copy_tile in copy_and_pack_block, and unpacking it
+        // through SrcA truncates every finished fp32 sum to TF32 (the low 13 mantissa bits are dropped) just
+        // before it is packed to the output. When the output is Float32, unpack it straight to DEST so the
+        // caller gets the fp32 sum, as ttnn.matmul does. Other output formats keep UnpackToSrc (a bf16 output
+        // cannot hold those 13 bits), as do the fused epilogues, in0, in1 and Quasar.
+        const bool intermediate_copy_only = !use_bias && !use_fused_ternary && !fuse_swiglu && !is_quasar &&
+                                            output_data_format == tt::DataFormat::Float32;
         auto& compute_unpack_modes = compute_hw.unpack_modes;
         for (const auto& [dfb, format] : compute_consumed) {
             // Only DFBs this kernel actually binds may appear in unpack_modes.
@@ -878,7 +886,9 @@ ttnn::device_operation::ProgramArtifacts MinimalMatmulDeviceOperation::ProgramFa
                                (dfb == DFB_IN2 && use_bias) ||
                                ((dfb == DFB_TERNARY_A || dfb == DFB_TERNARY_B) && use_fused_ternary);
             if (bound && format == tt::DataFormat::Float32) {
-                compute_unpack_modes.emplace(dfb, tt::tt_metal::UnpackMode::UnpackToSrc);
+                const bool to_dest = dfb == DFB_INTERMEDIATE && intermediate_copy_only;
+                compute_unpack_modes.emplace(
+                    dfb, to_dest ? tt::tt_metal::UnpackMode::UnpackToDest : tt::tt_metal::UnpackMode::UnpackToSrc);
             }
         }
     }
