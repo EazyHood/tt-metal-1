@@ -15,7 +15,9 @@ from tt_py_test_utils_common.utility_functions import comp_pcc
 @pytest.mark.parametrize("mem_layout", [ttnn.TensorMemoryLayout.INTERLEAVED])
 @pytest.mark.parametrize("memory_location", [ttnn.BufferType.L1, ttnn.BufferType.DRAM])
 @pytest.mark.parametrize("tensor_layout", [ttnn.TILE_LAYOUT, ttnn.ROW_MAJOR_LAYOUT])
-def test_tensor_preallocation_and_write_apis(shape, in_dtype, mem_layout, memory_location, tensor_layout, device):
+def test_tensor_preallocation_and_write_apis_single_device(
+    shape, in_dtype, mem_layout, memory_location, tensor_layout, device
+):
     if in_dtype == ttnn.bfloat8_b and tensor_layout == ttnn.ROW_MAJOR_LAYOUT:
         pytest.skip("Row Major Layout not supported for Bfp8")
     torch.manual_seed(0)

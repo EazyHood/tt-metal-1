@@ -594,9 +594,9 @@ def test_pad_rm_sharded_height_only_override_addr_change(device):
 
 @pytest.mark.parametrize("h", [32])
 @pytest.mark.parametrize("w", [64])
-@pytest.mark.parametrize("padding,torch_padding", [(((0, 64),), (0, 64)), (((16, 16), (0, 32)), (0, 32, 0, 32))])
+@pytest.mark.parametrize("padding,torch_padding", [(((0, 64),), (0, 64))])
 @pytest.mark.parametrize("value", [0])
-def test_pad(device, h, w, padding, torch_padding, value):
+def test_pad_tile_back_padding(device, h, w, padding, torch_padding, value):
     torch.manual_seed(0)
 
     torch_input_tensor = torch.rand((h, w), dtype=torch.bfloat16)

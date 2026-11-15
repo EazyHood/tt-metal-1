@@ -116,7 +116,7 @@ def test_bernoulli_callback(shape, seed, in_dtype, out_dtype, device):
     assert num_program_cache_entries_list[0] == num_program_cache_entries_list[1]
 
 
-def test_bernoulli_seed_distinguishes_cache_entries(device):
+def test_bernoulli_seed_distinguishes_cache_entries_float32(device):
     """Regression guard for bernoulli's seed static/dynamic contract.
 
     `seed` is excluded from compute_program_hash (so calls differing only in seed cache-hit) but
